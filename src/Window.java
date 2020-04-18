@@ -4,11 +4,13 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.Comparator;
 
 public class Window extends JFrame{
     DefaultTableModel dm;
+    static Connection co;
 
     Comparator<Student> weightComparator = new WeightComparator();
     Comparator<Student> heightComparator = new HeightComparator();
@@ -16,7 +18,7 @@ public class Window extends JFrame{
 
     Student test = new Student();
 
-    JTable dataTable;
+    private JTable dataTable;
     private JPanel panel;
     private JTextField surnameTextField;
     private JTextField weightTextField;
@@ -38,12 +40,56 @@ public class Window extends JFrame{
         dm.addColumn("Group");
     }
 
-    private void populate(String surname, Double weight, Double height, Integer group){
-        String[]rowData = {surname, weight.toString(), height.toString(), group.toString()};
-        dm.addRow(rowData);
+    void readFromDatabase() throws SQLException {
+        Statement statement = co.createStatement();
+        String query = "select * from students;";
+        ResultSet resultSet = statement.executeQuery(query);
+
+        while (resultSet.next()){
+            Student.data.add(new Student(
+                    resultSet.getString("surname"),
+                    resultSet.getDouble("weight"),
+                    resultSet.getDouble("height"),
+                    resultSet.getInt("gruppa")));
+        }
     }
 
-    public Window(){
+    void openDatabase(){
+        try {
+            Class.forName("org.sqlite.JDBC");
+            co = DriverManager.getConnection("jdbc:sqlite:D:\\javaProjects\\lr3\\src\\students.db");
+            System.out.println("Connected");
+        } catch (ClassNotFoundException | SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    void insertToDatabase(String name, double weight, double height, int group) throws SQLException {
+        String query = "insert into students(surname, weight, height, gruppa) " +
+                "values ('"+ name +"', " + weight + ", " + height + ", " + group + ");";
+        Statement statement = co.createStatement();
+        statement.executeUpdate(query);
+
+        System.out.println("Rows added");
+    }
+
+    void closeDatabase(){
+        try {
+            co.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void populate(String surname, Double weight, Double height, Integer group){
+        String[] rowData = {surname, weight.toString(), height.toString(), group.toString()};
+        dm.addRow(rowData);
+
+    }
+
+    public Window() throws SQLException {
+        openDatabase();
+
         setSize(800,600);
         setTitle("Students");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -53,8 +99,11 @@ public class Window extends JFrame{
         setVisible(true);
 
         createColumns();
+        readFromDatabase();
+
         for(Student item : Student.data){
             populate(item.surname, item.weight, item.height, item.group);
+            //insert(item.surname, item.weight, item.height, item.group);    //to initialize database
         }
 
         EventListener event  = new EventListener();
@@ -87,6 +136,18 @@ public class Window extends JFrame{
 
                 dm.setValueAt(group , dataTable.getSelectedRow(), 3);
                 test.changeGroup(surnameTextField.getText(), group);
+                String query = "UPDATE students " +
+                        "SET gruppa = " + group + " "+
+                        "WHERE surname = '" + surnameTextField.getText() + "';";
+                Statement statement = null;
+                try {
+                    statement = co.createStatement();
+                    statement.executeUpdate(query);
+
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("Group changed");
             }
 
             if(action.getSource() == addStudentButton){
@@ -103,9 +164,15 @@ public class Window extends JFrame{
                         break;
                     }
                 }
+
                 if(flag){
                     populate(surnameTextField.getText(), weight, height, group);
                     test.addStudent(surnameTextField.getText(), weight, height, group);
+                    try {
+                        insertToDatabase(surnameTextField.getText(), weight, height, group);
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
                 }
                 surnameTextField.setText("");
                 weightTextField.setText("");
@@ -135,6 +202,7 @@ public class Window extends JFrame{
                 }
                 for(Student item : sorted){
                     populate(item.surname, item.weight, item.height, item.group);
+
                 }
             }
 
